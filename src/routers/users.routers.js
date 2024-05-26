@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import {prisma} from '../utils/prisma.util.js'; //사용처.. 확인
+import jwt from "jsonwebtoken";
 
 
 const router = express.Router()
@@ -26,14 +27,14 @@ try{
    // - **회원 정보 중 하나라도 빠진 경우** - “OOO을 입력해 주세요.”
    if(!email || !name || !password ||!passwordConfirm){
      const missingFields =[];
-     if(!email){missingFields.push('이메일을');}
-     if(!name){missingFields.push('이름을');}
-     if(!password){missingFields.push('비밀번호를');}
-     if(!passwordConfirm){missingFields.push('비밀번호 확인을');}
+     if(!email){missingFields.push('이메일을')};
+     if(!name){missingFields.push('이름을')};
+     if(!password){missingFields.push('비밀번호를')};
+     if(!passwordConfirm){missingFields.push('비밀번호 확인을')};
       
 
-    return res.status(400).json({
-        status:400,
+    return res.status(401).json({
+        status:401,
         message:`${missingFields} 입력해 주세요.`
     })
    }
@@ -80,11 +81,63 @@ return res.status(201).json({
   }
 })
 
+//로그인 API
+ router.post('/login', async(req, res, next)=>{
+   const{email, password} = req.body;
+// - **로그인 정보 중 하나라도 빠진 경우** - “OOO을 입력해 주세요.”
+if(!email || !password){
+ const missingFields =[];
+   if(!email){missingFields.push("이메일을")};
+   if(!password){missingFields.push("비밀번호를")};
 
+    return res.status(401).json({
+        status:401,
+        message:`${missingFields} 입력해 주세요.`
+    });
+}
+   // - **이메일 형식에 맞지 않는 경우** - “이메일 형식이 올바르지 않습니다.”
+   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+   if(!emailRegex.test(email)){
+    return res.status(400).json({
+        status: 400,
+        message: "이메일 형식이 올바르지 않습니다."
+    });
+   }
+   
+   // - **이메일로 조회되지 않거나 비밀번호가 일치하지 않는 경우** - “인증 정보가 유효하지 않습니다.”
+   const user = await prisma.users.findFirst({where:{email},
+ });
 
+ if(!user){
+    return res.status(401).json({status:401, message:"인증 정보가 유효하지 않습니다."})
+ }
 
+ //비밀번호 일치
+ if(!await bcrypt.compare(password,user.password)){
+    return res.status(401).json({
+        status:401,
+        message:"인증 정보가 유효하지 않습니다."
+    })
+ }
+//사용자에게 jwt발급
 
+const token =jwt.sign(
+    {
+      userId: user.userId,
+    },
+    process.env.JWT_SECRET,//비밀키
+    {expiresIn: '12h'} //유효기간 12시간
+  )
 
+  res.cookie('authorization', `Bearer ${token}`);
+
+  
+   return res.status(200).json({
+    status:200,
+    message: "로그인 성공했습니다.",
+    accessToken: token
+    })
+ })
 
 
 export default router;
