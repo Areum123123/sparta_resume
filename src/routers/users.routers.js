@@ -1,7 +1,8 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import {prisma} from '../utils/prisma.util.js'; //사용처.. 확인
+import {prisma} from '../utils/prisma.util.js';
 import jwt from "jsonwebtoken";
+import authMiddleware from "../middlewares/auth.middleware.js";
 
 
 const router = express.Router()
@@ -121,23 +122,47 @@ if(!email || !password){
  }
 //사용자에게 jwt발급
 
-const token =jwt.sign(
+const accessToken =jwt.sign(
     {
       userId: user.userId,
-    },
-    process.env.JWT_SECRET,//비밀키
-    {expiresIn: '12h'} //유효기간 12시간
-  )
+    },process.env.ACCESS_TOKEN_SECRET_KEY,{expiresIn: '12h'});
 
-  res.cookie('authorization', `Bearer ${token}`);
+  res.header('authorization', `Bearer ${accessToken}`); ////cookie-> header///////
 
   
    return res.status(200).json({
     status:200,
     message: "로그인 성공했습니다.",
-    accessToken: token
+    accessToken: accessToken
     })
  })
 
 
+ //내 정보 조회 API
+ router.get('/user',authMiddleware, async(req, res, next)=>{
+
+try{
+  const {userId} = req.user;
+
+const user = await prisma.users.findFirst({
+  where:{userId: +userId},  
+ select:{  
+   userId: true,
+   email: true,
+   name:true,
+   role:true,
+   createdAt :true,
+   updatedAt:true,
+   },
+ })
+
+  return res.status(200).json({data:user});
+} catch(err){
+     next(err);
+ }
+})
 export default router;
+
+
+
+
