@@ -9,7 +9,7 @@ const router = express.Router();
 /*회원가입 API */
 router.post('/register', async (req, res, next) => {
   const { email, password, passwordConfirm, name } = req.body;
-  
+
   try {
     const isExistUser = await prisma.users.findFirst({
       where: {
