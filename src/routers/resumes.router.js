@@ -128,13 +128,13 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
   const { title, introduction } = req.body;
 
   try {
-    if (!title || !introduction) {
+    if (!title && !introduction) {
       return res
         .status(400)
         .json({ status: 400, message: '수정 할 정보를 입력해 주세요.' });
     }
 
-    if (introduction.length < 150) {
+    if (introduction && introduction.length < 150) {
       return res
         .status(400)
         .json({
@@ -163,8 +163,8 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
         UserId: userId,
       },
       data: {
-        title: title,
-        introduction: introduction,
+        title: title || resume.title,
+        introduction: introduction || resume.introduction,
       },
       include: {
         User: true,
