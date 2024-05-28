@@ -166,14 +166,11 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
         title: title || resume.title,
         introduction: introduction || resume.introduction,
       },
-      include: {
-        User: true,
-      },
     });
 
     const result = {
       resumeId: updatedResume.resumeId,
-      name: updatedResume.User.name,
+      UserId: updatedResume.UserId,
       title: updatedResume.title,
       introduction: updatedResume.introduction,
       status: updatedResume.status,
