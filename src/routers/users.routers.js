@@ -86,7 +86,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// const tokenStorages = {};
+
 
 //로그인 API
 router.post('/login', async (req, res, next) => {
@@ -141,27 +141,14 @@ router.post('/login', async (req, res, next) => {
     { expiresIn: '12h' },
   );
 
-  //refresh토큰 구현중 ,const tokenStorages ={};리프레시 토큰을 관리할 객체  85번
-  // const refreshToken = jwt.sign(
-  //   {
-  //     userId : user.userId,
-  //   },process.env.REFRESH_TOKEN_SECRET_KEY,{expiresIn: '7d'});
-
-  //   //리프레시토큰을 데이터베이스에서 관리한다면 이것도 달라지겠찌.
-  //   tokenStorages[refreshToken] = {
-  //     userId : user.userId,
-  //     ip : req.ip,
-  //     userAgent:req.headers['user-agent'], //해당클라이언트가 어떤상태로 요청
-  //   }
-  //   res.header('authorization', `Bearer ${accessToken}`); ////cookie-> header///////
-  //   res.header('refreshToken', `Bearer ${refreshToken}`);
-  //refresh 토큰 구현끝
+ 
   return res.status(200).json({
     status: 200,
     message: '로그인 성공했습니다.',
     accessToken: accessToken,
   });
 });
+//refreshtoken
 
 //내 정보 조회 API
 router.get('/user', authMiddleware, async (req, res, next) => {
@@ -186,3 +173,26 @@ router.get('/user', authMiddleware, async (req, res, next) => {
   }
 });
 export default router;
+
+
+
+
+
+
+
+
+ //refresh토큰  ,const tokenStorages ={};리프레시 토큰을 관리할 객체  85번
+  // const refreshToken = jwt.sign(
+  //   {
+  //     userId : user.userId,
+  //   },process.env.REFRESH_TOKEN_SECRET_KEY,{expiresIn: '7d'});
+
+  //   //리프레시토큰을 데이터베이스에서 관리한다면 이것도 달라지겠찌.
+  //   tokenStorages[refreshToken] = {
+  //     userId : user.userId,
+  //     ip : req.ip,
+  //     userAgent:req.headers['user-agent'], //해당클라이언트가 어떤상태로 요청
+  //   }
+  //   res.header('authorization', `Bearer ${accessToken}`); ////cookie-> header///////
+  //   res.header('refreshToken', `Bearer ${refreshToken}`);
+  //refresh 토큰 구현끝

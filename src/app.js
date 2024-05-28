@@ -3,6 +3,9 @@ import cookieParser from 'cookie-parser';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
 import UsersRouter from './routers/users.routers.js';
 import ResumesRouter from './routers/resumes.router.js';
+import dotenv from 'dotenv';
+
+dotenv.config(); //.env 파일 로드
 
 const app = express();
 const PORT = process.env.PORT_NUMBER;

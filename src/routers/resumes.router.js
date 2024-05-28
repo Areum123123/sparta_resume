@@ -46,23 +46,21 @@ router.post('/resumes', authMiddleware, async (req, res, next) => {
 
 /*이력서 목록 조회 API(accessToken인증)*/
 router.get('/resumes', authMiddleware, async (req, res, next) => {
-  const { userId, role } = req.user;  //역할포함
+  const { userId, role } = req.user;
   const { sort, status } = req.query; //정렬기준받기
   const orderBy = sort && sort.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  //이력서조회
-  try {
-    
+  
     const whereCondition = {};
     if (role !== 'RECRUITER') {
       whereCondition.UserId = userId; // RECRUITER가 아니면 본인 이력서만 조회
     }
     if (status) {
-      whereCondition.status = status; // 지원상태 값이 있으면 조건에추가
+      whereCondition.status = status; // 지원 상태 필터링
     }
 
-
-
+  //이력서조회
+  try {
     const resumes = await prisma.resumes.findMany({
       where: whereCondition,
       orderBy: { createdAt: orderBy },
