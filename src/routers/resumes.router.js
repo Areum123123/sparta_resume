@@ -46,14 +46,23 @@ router.post('/resumes', authMiddleware, async (req, res, next) => {
 
 /*이력서 목록 조회 API(accessToken인증)*/
 router.get('/resumes', authMiddleware, async (req, res, next) => {
-  const { userId } = req.user;
-  const { sort } = req.query; //정렬기준받기
+  const { userId, role } = req.user;
+  const { sort, status } = req.query; //정렬기준받기
   const orderBy = sort && sort.toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  
+    const whereCondition = {};
+    if (role !== 'RECRUITER') {
+      whereCondition.UserId = userId; // RECRUITER가 아니면 본인 이력서만 조회
+    }
+    if (status) {
+      whereCondition.status = status; // 지원 상태 필터링
+    }
 
   //이력서조회
   try {
     const resumes = await prisma.resumes.findMany({
-      where: { UserId: userId },
+      where: whereCondition,
       orderBy: { createdAt: orderBy },
       include: {
         User: {
@@ -84,10 +93,12 @@ router.get('/resumes', authMiddleware, async (req, res, next) => {
 
 /* 이력서 상세 조회 API */
 router.get('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
-  const { userId } = req.user;
+  const { userId, role } = req.user;
   const { resumeid } = req.params;
+  
   try {
-    const resume = await prisma.resumes.findFirst({
+    const resume = role === 'APPLICATN'?
+     await prisma.resumes.findFirst({
       where: {
         resumeId: +resumeid,
         UserId: userId,
@@ -97,7 +108,17 @@ router.get('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
           select: { name: true },
         },
       },
-    });
+    })
+    :await prisma.resumes.findFirst({
+      where: {
+        resumeId: +resumeid,
+      },
+      include: {
+        User: {
+          select: { name: true },
+        },
+      },
+    })
 
     if (!resume) {
       return res
