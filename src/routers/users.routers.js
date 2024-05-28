@@ -86,7 +86,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-const tokenStorages = {};
+// const tokenStorages = {};
 
 //로그인 API
 router.post('/login', async (req, res, next) => {
