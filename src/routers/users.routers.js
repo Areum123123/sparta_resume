@@ -3,6 +3,9 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../utils/prisma.util.js';
 import jwt from 'jsonwebtoken';
 import authMiddleware from '../middlewares/auth.middleware.js';
+import { requireRefreshToken } from '../middlewares/require-refresh-token.middleware.js';
+import { HTTP_STATUS } from '../constants/http-status.constant.js';
+import {ACCESS_TOKEN_SECRET_KEY, REFRESH_TOKEN_SECRET_KEY} from '../constants/env.constant.js'
 
 const router = express.Router();
 
@@ -17,8 +20,8 @@ router.post('/register', async (req, res, next) => {
       },
     });
     if (isExistUser) {
-      return res.status(409).json({
-        status: 409,
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        status: HTTP_STATUS.CONFLICT,
         message: '이미 가입 된 사용자입니다.',
       });
     }
@@ -38,31 +41,31 @@ router.post('/register', async (req, res, next) => {
         missingFields.push('비밀번호 확인을');
       }
 
-      return res.status(401).json({
-        status: 401,
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+        status: HTTP_STATUS.UNAUTHORIZED,
         message: `${missingFields} 입력해 주세요.`,
       });
     }
     // 이메일 형식에 맞지 않는 경우 "이메일 형식이 올바르지 않습니다.”
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        status: 400,
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: HTTP_STATUS.BAD_REQUEST,
         message: '이메일 형식이 올바르지 않습니다.',
       });
     }
 
     //비밀번호가 6자리 미만인 경우- “비밀번호는 6자리 이상이어야 합니다.”
     if (password.length < 6) {
-      return res.status(400).json({
-        status: 400,
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status:  HTTP_STATUS.BAD_REQUEST,
         message: '비밀번호는 6자리 이상이어야 합니다.',
       });
     }
     //비밀번호와 비밀번호 확인이 일치하지 않는 경우- “입력 한 두 비밀번호가 일치하지 않습니다.”
     if (password !== passwordConfirm) {
-      return res.status(400).json({
-        status: 400,
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: HTTP_STATUS.BAD_REQUEST,
         message: '입력 한 두 비밀번호가 일치하지 않습니다.',
       });
     }
@@ -78,15 +81,14 @@ router.post('/register', async (req, res, next) => {
       },
     });
 
-    return res.status(201).json({
+    return res.status(HTTP_STATUS.CREATE).json({
+      status:HTTP_STATUS.CREATE,
       message: '회원 가입이 성공적으로 완료되었습니다.',
     });
   } catch (err) {
     next(err);
   }
 });
-
-
 
 //로그인 API
 router.post('/login', async (req, res, next) => {
@@ -131,27 +133,128 @@ router.post('/login', async (req, res, next) => {
       message: '인증 정보가 유효하지 않습니다.',
     });
   }
-  //사용자에게 jwt발급
+  //사용자에게 accesstoken jwt발급
 
   const accessToken = jwt.sign(
     {
       userId: user.userId,
     },
-    process.env.ACCESS_TOKEN_SECRET_KEY,
+   ACCESS_TOKEN_SECRET_KEY,
     { expiresIn: '12h' },
   );
 
- 
+  //refresh토큰  발급
+  const refreshToken = jwt.sign(
+    {
+      userId : user.userId,
+    },REFRESH_TOKEN_SECRET_KEY,{expiresIn: '7d'});
+
+  
+    //refresh 토큰 저장(hash 값으로 저장)
+    const hashedRefreshToken = bcrypt.hashSync(refreshToken,10);
+   
+    //refresh 토큰 생성 또는 갱신 upsert() 있으면 update 없으면 create
+    await prisma.refreshToken.upsert({
+      where:{
+        UserId : user.userId
+      },
+      update:{
+        refresh_token:hashedRefreshToken,
+      },
+      create:{
+        UserId : user.userId,
+        refresh_token:hashedRefreshToken,
+      }
+    })
+
+  
   return res.status(200).json({
     status: 200,
     message: '로그인 성공했습니다.',
-    accessToken: accessToken,
+    data:{
+      accessToken: accessToken,
+      refreshToken: refreshToken
+    }
+    
   });
 });
-//refreshtoken
 
+
+//refresh토큰 재발급
+router.post('/token',requireRefreshToken, async(req, res, next)=>{
+  try{
+     const user = req.user; //미들웨어인증받은 user
+     const payload = { userId: user.userId };
+     
+ 
+     // const payload = {userId : user.userId};
+ 
+     const accessToken = jwt.sign(
+       payload,
+       process.env.ACCESS_TOKEN_SECRET_KEY,
+       { expiresIn: '12h' },
+     );
+     //refresh토큰  발급
+   const refreshToken = jwt.sign(
+     payload,
+     process.env.REFRESH_TOKEN_SECRET_KEY,{expiresIn: '7d'});
+ 
+    const hashedRefreshToken = bcrypt.hashSync(refreshToken,10);
+ 
+    await prisma.refreshToken.upsert({
+     where: {UserId : user.userId},
+     update:{
+       refresh_token:hashedRefreshToken,
+     },
+     create:{
+       UserId : user.userId,
+       refresh_token:hashedRefreshToken,
+     }
+   })
+ 
+     
+ 
+   return res.status(200).json({
+   status: 200,
+   message: '토큰 재발급에 성공했습니다.',
+   data:{accessToken: accessToken, refreshToken: refreshToken},
+     });
+  }catch(err){
+   next(err);  
+ }
+ 
+ })
+ 
+
+ //로그아웃 API
+ router.post('/sign-out', requireRefreshToken, async(req, res, next)=>{
+   try{
+     const user = req.user;
+     //refreshToken 로그아웃시 Null 값
+     await prisma.refreshToken.update({
+       where:{UserId:user.userId},
+       data:{
+         refresh_token:null,
+       }
+     })
+ 
+     return res.status(200).json({
+       status: 200,
+       message: '로그아웃에 성공했습니다.',
+       data:{ID: user.userId},
+         });
+   }catch(err){
+     next(err);
+   }
+ })
+ 
+
+//  res.header('authorization', `Bearer ${accessToken}`); //헤더로 전달
+//   res.header('refreshToken', `Bearer ${refreshToken}`);
+ 
+  
 //내 정보 조회 API
-router.get('/user', authMiddleware, async (req, res, next) => {
+router.get('/users', authMiddleware, async (req, res, next) => {
   try {
     const { userId } = req.user;
 
@@ -167,32 +270,17 @@ router.get('/user', authMiddleware, async (req, res, next) => {
       },
     });
 
-    return res.status(200).json({ data: user });
+    return res.status(HTTP_STATUS.OK).json({status:HTTP_STATUS.OK, data: user });
   } catch (err) {
     next(err);
   }
 });
+
+
+
+
+
+
 export default router;
 
 
-
-
-
-
-
-
- //refresh토큰  ,const tokenStorages ={};리프레시 토큰을 관리할 객체  85번
-  // const refreshToken = jwt.sign(
-  //   {
-  //     userId : user.userId,
-  //   },process.env.REFRESH_TOKEN_SECRET_KEY,{expiresIn: '7d'});
-
-  //   //리프레시토큰을 데이터베이스에서 관리한다면 이것도 달라지겠찌.
-  //   tokenStorages[refreshToken] = {
-  //     userId : user.userId,
-  //     ip : req.ip,
-  //     userAgent:req.headers['user-agent'], //해당클라이언트가 어떤상태로 요청
-  //   }
-  //   res.header('authorization', `Bearer ${accessToken}`); ////cookie-> header///////
-  //   res.header('refreshToken', `Bearer ${refreshToken}`);
-  //refresh 토큰 구현끝

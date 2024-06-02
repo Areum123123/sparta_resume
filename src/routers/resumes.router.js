@@ -1,6 +1,8 @@
 import express from 'express';
 import authMiddleware from '../middlewares/auth.middleware.js';
 import { prisma } from '../utils/prisma.util.js';
+import { HTTP_STATUS } from '../constants/http-status.constant.js';
+import { requireRoles } from '../middlewares/require-roles.middleware.js';
 
 const router = express.Router();
 
@@ -19,14 +21,14 @@ router.post('/resumes', authMiddleware, async (req, res, next) => {
       missingFields.push('자기소개');
     }
     return res
-      .status(400)
-      .json({ status: 400, message: `${missingFields}을(를) 입력해주세요.` });
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json({ status: HTTP_STATUS.BAD_REQUEST, message: `${missingFields}을(를) 입력해주세요.` });
   }
   //자기소개150자
   if (introduction.length < 150) {
     return res
-      .status(400)
-      .json({ status: 400, message: '자기소개는 150자 이상 작성해야 합니다.' });
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json({ status: HTTP_STATUS.BAD_REQUEST, message: '자기소개는 150자 이상 작성해야 합니다.' });
   }
   //이력서생성
   try {
@@ -38,7 +40,7 @@ router.post('/resumes', authMiddleware, async (req, res, next) => {
       },
     });
 
-    return res.status(201).json({ data: resume });
+    return res.status(HTTP_STATUS.CREATE).json({ data: resume });
   } catch (err) {
     next(err);
   }
@@ -82,10 +84,10 @@ router.get('/resumes', authMiddleware, async (req, res, next) => {
     }));
 
     if (!resumes.length) {
-      return res.status(200).json([]);
+      return res.status(HTTP_STATUS.OK).json([]);
     }
 
-    return res.status(200).json({ data: result });
+    return res.status(HTTP_STATUS.OK).json({ data: result });
   } catch (err) {
     next(err);
   }
@@ -97,7 +99,7 @@ router.get('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
   const { resumeid } = req.params;
   
   try {
-    const resume = role === 'APPLICATN'?
+    const resume = role === 'APPLICANT'?
      await prisma.resumes.findFirst({
       where: {
         resumeId: +resumeid,
@@ -122,8 +124,8 @@ router.get('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
 
     if (!resume) {
       return res
-        .status(404)
-        .json({ status: 404, message: '이력서가 존재하지 않습니다.' });
+        .status(HTTP_STATUS.NOTFOUND)
+        .json({ status: HTTP_STATUS.NOTFOUND, message: '이력서가 존재하지 않습니다.' });
     }
 
     const result = {
@@ -136,7 +138,7 @@ router.get('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
       updatedAt: resume.updatedAt,
     };
 
-    return res.status(200).json({ data: result });
+    return res.status(HTTP_STATUS.OK).json({ data: result });
   } catch (err) {
     next(err);
   }
@@ -151,15 +153,15 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
   try {
     if (!title && !introduction) {
       return res
-        .status(400)
-        .json({ status: 400, message: '수정 할 정보를 입력해 주세요.' });
+        .status(HTTP_STATUS.BAD_REQUEST)
+        .json({ status: HTTP_STATUS.BAD_REQUEST, message: '수정 할 정보를 입력해 주세요.' });
     }
 
     if (introduction && introduction.length < 150) {
       return res
-        .status(400)
+        .status(HTTP_STATUS.BAD_REQUEST)
         .json({
-          status: 400,
+          status: HTTP_STATUS.BAD_REQUEST,
           message: '자기소개는 150자 이상 작성해야 합니다.',
         });
     }
@@ -173,8 +175,8 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
 
     if (!resume) {
       return res
-        .status(404)
-        .json({ status: 404, message: '이력서가 존재하지 않습니다.' });
+        .status(HTTP_STATUS.NOTFOUND)
+        .json({ status: HTTP_STATUS.NOTFOUND, message: '이력서가 존재하지 않습니다.' });
     }
 
     //정보수정
@@ -198,7 +200,7 @@ router.patch('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
       createdAt: updatedResume.createdAt,
       updatedAt: updatedResume.updatedAt,
     };
-    return res.status(200).json({ data: result });
+    return res.status(HTTP_STATUS.OK).json({ data: result });
   } catch (err) {
     next(err);
   }
@@ -219,8 +221,8 @@ router.delete('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
 
     if (!resume) {
       return res
-        .status(404)
-        .json({ status: 404, message: '이력서가 존재하지 않습니다.' });
+        .status(HTTP_STATUS.NOTFOUND)
+        .json({ status: HTTP_STATUS.NOTFOUND, message: '이력서가 존재하지 않습니다.' });
     }
 
     //이력서 삭제
@@ -231,14 +233,31 @@ router.delete('/resumes/:resumeid', authMiddleware, async (req, res, next) => {
       },
     });
     return res
-      .status(200)
+      .status(HTTP_STATUS.OK)
       .json({
-        status: 200,
+        status: HTTP_STATUS.OK,
         message: `이력서(RESUMEID: ${resumeid})가 성공적으로 삭제되었습니다.`,
       });
   } catch (err) {
     next(err);
   }
 });
+
+//이력서 지원 상태 변경 api(미들웨어 require-roles.middleware.js)/api/resumes/:resumeid/status
+router.patch('/resumes/:resumeid/status',authMiddleware , requireRoles(['RECRUITER']),async(req, res, next)=>{
+  try{
+  const data =null;
+  return res.status(HTTP_STATUS.OK).json({
+    status:HTTP_STATUS.OK,
+    message:"이력서 지원 상태 변경에 성공했습니다.",
+    data,
+  })
+
+  }catch(err){
+    next(err)
+  }
+})
+
+
 
 export default router;

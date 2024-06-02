@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["omitApi"]
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -20,6 +21,7 @@ datasource db {
   updatedAt DateTime @updatedAt  @map("updatedAt")
 
   Resumes Resumes[]
+  RefreshToken RefreshToken?
 
   @@map("Users")
  }
@@ -54,3 +56,16 @@ INTERVIEW2
 FINAL_PASS
 
 }
+
+model RefreshToken {
+  Id       Int     @id @default(autoincrement()) @map("Id")
+ UserId    Int  @unique   @map("UserId")
+ refresh_token    String?  @map("refresh_token")
+ 
+createdAt DateTime @default(now()) @map("createdAt")
+updatedAt DateTime @updatedAt  @map("updatedAt")
+  
+
+  User Users @relation(fields:[UserId], references: [userId], onDelete:Cascade)
+  @@map("RefreshToken")
+  }

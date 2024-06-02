@@ -11,7 +11,9 @@ export default async function (req, res, next) {
       throw new Error('지원하지 않는 인증 방식입니다.');
 
     const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET_KEY);
+   //사용자 ID 와 일치하는 사용자가 없는 경우
     const userId = decodedToken.userId;
+    //const {userId}=decodedToken 으로 사용할수도 있음.
 
     const user = await prisma.users.findFirst({
       where: { userId: +userId },
@@ -30,7 +32,7 @@ export default async function (req, res, next) {
 
     switch (err.name) {
       case 'TokenExpiredError': //토큰이 만료되었을 때 발생하는 에러
-        return res.status(401).json({ message: '인증 정보가 만료되었습니다.' });
+      return res.status(401).json({ message: '인증 정보가 만료되었습니다.' });
       case 'JsonWebTokenError': // 토큰에 검증이 실패 했을 때, 발생하는 에러
         return res
           .status(401)
