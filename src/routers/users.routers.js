@@ -9,71 +9,18 @@ import {ACCESS_TOKEN_SECRET_KEY, REFRESH_TOKEN_SECRET_KEY} from '../constants/en
 
 const router = express.Router();
 
-/*회원가입 API */
+/*회원가입 API */ //유효성구현안해놓음 맨하단의 코드 참고하기
 router.post('/register', async (req, res, next) => {
   const { email, password, passwordConfirm, name } = req.body;
 
-  try {
-    const isExistUser = await prisma.users.findFirst({
-      where: {
-        email,
-      },
-    });
-    if (isExistUser) {
-      return res.status(HTTP_STATUS.CONFLICT).json({
-        status: HTTP_STATUS.CONFLICT,
-        message: '이미 가입 된 사용자입니다.',
-      });
-    }
-    // - **회원 정보 중 하나라도 빠진 경우** - “OOO을 입력해 주세요.”
-    if (!email || !name || !password || !passwordConfirm) {
-      const missingFields = [];
-      if (!email) {
-        missingFields.push('이메일을');
-      }
-      if (!name) {
-        missingFields.push('이름을');
-      }
-      if (!password) {
-        missingFields.push('비밀번호를');
-      }
-      if (!passwordConfirm) {
-        missingFields.push('비밀번호 확인을');
-      }
-
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        status: HTTP_STATUS.UNAUTHORIZED,
-        message: `${missingFields} 입력해 주세요.`,
-      });
-    }
-    // 이메일 형식에 맞지 않는 경우 "이메일 형식이 올바르지 않습니다.”
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({
-        status: HTTP_STATUS.BAD_REQUEST,
-        message: '이메일 형식이 올바르지 않습니다.',
-      });
-    }
-
-    //비밀번호가 6자리 미만인 경우- “비밀번호는 6자리 이상이어야 합니다.”
-    if (password.length < 6) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({
-        status:  HTTP_STATUS.BAD_REQUEST,
-        message: '비밀번호는 6자리 이상이어야 합니다.',
-      });
-    }
-    //비밀번호와 비밀번호 확인이 일치하지 않는 경우- “입력 한 두 비밀번호가 일치하지 않습니다.”
-    if (password !== passwordConfirm) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({
-        status: HTTP_STATUS.BAD_REQUEST,
-        message: '입력 한 두 비밀번호가 일치하지 않습니다.',
-      });
-    }
-    //3. **비즈니스 로직(데이터 처리)**
+try{
+// 인증 코드를 이메일로 전송(email.js)
+await sendEmail(email);
+  
     //- 보안을 위해 비밀번호는 평문으로 저장하지 않고 Hash 된 값을 저장
     const hashedPassword = await bcrypt.hash(password, 10);
     //Users테이블에 사용자를 추가
-    const user = await prisma.users.create({
+    const user = await prisma.tempUsers.create({
       data: {
         email,
         password: hashedPassword,
@@ -81,9 +28,8 @@ router.post('/register', async (req, res, next) => {
       },
     });
 
-    return res.status(HTTP_STATUS.CREATE).json({
-      status:HTTP_STATUS.CREATE,
-      message: '회원 가입이 성공적으로 완료되었습니다.',
+    return res.status(201).json({
+      message: '회원 가입 요청이 성공적으로 처리되었습니다. 이메일을 확인해주세요.' ,
     });
   } catch (err) {
     next(err);
@@ -276,11 +222,207 @@ router.get('/users', authMiddleware, async (req, res, next) => {
   }
 });
 
+//회원탈퇴 //코트만붙여넣은거라 수정필요할 수 도 있음
+router.delete('/:userId', async (req, res, next) => {
+  const userId = parseInt(req.params.userId);
+
+  try {
+    // 데이터베이스에서 해당 userId를 가진 사용자 삭제
+    await prisma.users.delete({
+      where: {
+        userId: userId,
+      },
+    });
+
+    return res.status(200).json({ message: '사용자가 성공적으로 탈퇴되었습니다.' });
+  } catch (error) {
+    console.error('사용자 삭제 중 오류 발생:', error);
+    return res.status(500).json({ error: '사용자 삭제 중 오류가 발생했습니다.' });
+  }
+});
 
 
+//인증번호 확인후 가입API
+router.get("/register/verify-email/:email", async(req,res,next)=>{
+
+  const { verificationCode } = req.body;
+  const email = req.params.email;
+
+  try {
+    const record = await prisma.email.findFirst({
+      where: { email },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!record || record.verificationCode !== parseInt(verificationCode, 10)) {
+      return res.status(400).json({ message: '인증번호가 일치하지 않습니다.' });
+    }
+
+    // TempUser에서 사용자 정보 가져오기
+    const tempUser = await prisma.tempUsers.findFirst({ 
+      where: { email },
+      orderBy: { createdAt: 'desc' },
+     });
+
+    if (!tempUser) {
+      return res.status(400).json({ message: '가입 요청을 찾을 수 없습니다.' });
+    }
+
+  
+
+    // Users 테이블에 사용자 추가
+    const user = await prisma.users.create({
+      data: {
+        email: tempUser.email,
+        password: tempUser.password,
+        name: tempUser.name,
+      },
+    });
+
+    // TempUser 및 인증 레코드 삭제
+    await prisma.tempUsers.delete({ where: { email } });
+    await prisma.email.deleteMany({ where: { email } });
+
+    res.status(200).json({ message: '이메일이 성공적으로 인증되었습니다.' });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ message: '이메일 인증 중 오류가 발생했습니다.' });
+  }
+
+})
+
+//이메일인증번호 확인
+router.get("/register/verify-email/:email", async(req,res,next)=>{
+
+  const { verificationCode } = req.body;
+  const email = req.params.email;
+
+  try {
+    const record = await prisma.email.findFirst({
+      where: { email },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!record || record.verificationCode !== parseInt(verificationCode, 10)) {
+      return res.status(400).json({ message: '인증번호가 일치하지 않습니다.' });
+    }
+
+    // TempUser에서 사용자 정보 가져오기
+    const tempUser = await prisma.tempUsers.findFirst({ 
+      where: { email },
+      orderBy: { createdAt: 'desc' },
+     });
+
+    if (!tempUser) {
+      return res.status(400).json({ message: '가입 요청을 찾을 수 없습니다.' });
+    }
+
+  
+
+    // Users 테이블에 사용자 추가
+    const user = await prisma.users.create({
+      data: {
+        email: tempUser.email,
+        password: tempUser.password,
+        name: tempUser.name,
+      },
+    });
+
+    // TempUser ,email인증 테이블 삭제
+    await prisma.tempUsers.delete({ where: { email } });
+    await prisma.email.deleteMany({ where: { email } });
+
+    res.status(200).json({ message: '이메일이 성공적으로 인증되었습니다.' });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ message: '이메일 인증 중 오류가 발생했습니다.' });
+  }
+
+})
 
 
 
 export default router;
 
 
+
+/*회원가입 API */ //리펙토링 안한 회원가입 api 기본이라 남겨둠
+// router.post('/register', async (req, res, next) => {
+//   const { email, password, passwordConfirm, name } = req.body;
+
+//   try {
+//     const isExistUser = await prisma.users.findFirst({
+//       where: {
+//         email,
+//       },
+//     });
+//     if (isExistUser) {
+//       return res.status(HTTP_STATUS.CONFLICT).json({
+//         status: HTTP_STATUS.CONFLICT,
+//         message: '이미 가입 된 사용자입니다.',
+//       });
+//     }
+//     // - **회원 정보 중 하나라도 빠진 경우** - “OOO을 입력해 주세요.”
+//     if (!email || !name || !password || !passwordConfirm) {
+//       const missingFields = [];
+//       if (!email) {
+//         missingFields.push('이메일을');
+//       }
+//       if (!name) {
+//         missingFields.push('이름을');
+//       }
+//       if (!password) {
+//         missingFields.push('비밀번호를');
+//       }
+//       if (!passwordConfirm) {
+//         missingFields.push('비밀번호 확인을');
+//       }
+
+//       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+//         status: HTTP_STATUS.UNAUTHORIZED,
+//         message: `${missingFields} 입력해 주세요.`,
+//       });
+//     }
+//     // 이메일 형식에 맞지 않는 경우 "이메일 형식이 올바르지 않습니다.”
+//     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+//     if (!emailRegex.test(email)) {
+//       return res.status(HTTP_STATUS.BAD_REQUEST).json({
+//         status: HTTP_STATUS.BAD_REQUEST,
+//         message: '이메일 형식이 올바르지 않습니다.',
+//       });
+//     }
+
+//     //비밀번호가 6자리 미만인 경우- “비밀번호는 6자리 이상이어야 합니다.”
+//     if (password.length < 6) {
+//       return res.status(HTTP_STATUS.BAD_REQUEST).json({
+//         status:  HTTP_STATUS.BAD_REQUEST,
+//         message: '비밀번호는 6자리 이상이어야 합니다.',
+//       });
+//     }
+//     //비밀번호와 비밀번호 확인이 일치하지 않는 경우- “입력 한 두 비밀번호가 일치하지 않습니다.”
+//     if (password !== passwordConfirm) {
+//       return res.status(HTTP_STATUS.BAD_REQUEST).json({
+//         status: HTTP_STATUS.BAD_REQUEST,
+//         message: '입력 한 두 비밀번호가 일치하지 않습니다.',
+//       });
+//     }
+//     //3. **비즈니스 로직(데이터 처리)**
+//     //- 보안을 위해 비밀번호는 평문으로 저장하지 않고 Hash 된 값을 저장
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//     //Users테이블에 사용자를 추가
+//     const user = await prisma.users.create({
+//       data: {
+//         email,
+//         password: hashedPassword,
+//         name,
+//       },
+//     });
+
+//     return res.status(HTTP_STATUS.CREATE).json({
+//       status:HTTP_STATUS.CREATE,
+//       message: '회원 가입이 성공적으로 완료되었습니다.',
+//     });
+//   } catch (err) {
+//     next(err);
+//   }
+// });

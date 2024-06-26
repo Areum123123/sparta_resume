@@ -69,3 +69,21 @@ updatedAt DateTime @updatedAt  @map("updatedAt")
   User Users @relation(fields:[UserId], references: [userId], onDelete:Cascade)
   @@map("RefreshToken")
   }
+
+  model Email {
+  verificationCode Int      @unique
+  email            String
+  createdAt        DateTime @default(now())
+
+  @@map("Email")
+}
+
+
+
+model TempUsers {
+  email     String @id
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
